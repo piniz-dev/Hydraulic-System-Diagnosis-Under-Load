@@ -23,7 +23,7 @@ flowchart LR
   worker -->|feature mmap + model.joblib| db
 ```
 
-`replay.py` rimanda i cicli del test set. `api.py` scrive il lavoro e risponde senza classificare. Uno o più processi di `worker.py` prendono un lavoro alla volta, calcolano le feature, applicano `model.joblib` e salvano etichetta e tempi. La pagina su `http://127.0.0.1:8000` legge gli stessi record.
+`avvia.bat` fa partire questi pezzi. `replay.py` rimanda i cicli del test set. `api.py` scrive il lavoro e risponde senza classificare. Uno o più processi di `worker.py` prendono un lavoro alla volta, calcolano le feature, applicano `model.joblib` e salvano etichetta e tempi. La pagina su `http://127.0.0.1:8000` legge gli stessi record.
 
 ## 2. Codice sorgente e istruzioni di esecuzione
 
@@ -37,29 +37,48 @@ flowchart LR
 | `worker.py` | classificazione in processi separati |
 | `replay.py` | invio a ritmo costante e scrittura delle metriche |
 | `test_coda.py` | duplicati, presa esclusiva, ripresa dopo il lease |
+| `avvia.bat` | avvio completo: dati, API, worker, pagina e demo |
 | `config.ini` | URL del dataset, database, host, porta, worker, lease |
 | `risultati/valutazione_modello.txt` | metriche del modello |
 | `risultati/esperimenti.csv` | metriche di sistema |
 
-Dipendenze: Python 3 con `numpy`, `scikit-learn` e `joblib`.
+Dipendenze: Python 3 nel PATH, con `numpy`, `scikit-learn` e `joblib`.
 
 ```powershell
 cd "Hydraulic-System-Diagnosis-Under-Load"
 python -m pip install numpy scikit-learn joblib
 ```
 
-La prima volta aprire `train.ipynb` e fare Run All. Il notebook scarica lo zip (~70 MB) in `data/`, addestra i modelli, scrive `model.joblib`, `cicli_test.txt` e `risultati/valutazione_modello.txt`. `model.joblib` e `cicli_test.txt` sono già nel repository; la cartella `data/` no, quindi il notebook va eseguito almeno per scaricare le misure prima di avviare i worker.
+### Avvio automatico
 
-Poi, in tre terminali:
+Doppio clic su `avvia.bat`, oppure:
 
 ```powershell
-python test_coda.py
+.\avvia.bat
+```
+
+Lo script, in ordine:
+
+1. scarica il dataset in `data/` se i file non ci sono già (~70 MB la prima volta);
+2. legge host e porta da `config.ini`;
+3. se `http://127.0.0.1:8000/stats` non risponde, apre due finestre: `api.py` e `worker.py 1`;
+4. aspetta che la pagina risponda;
+5. apre il browser sulla pagina operatore;
+6. invia 20 cicli del test set a 2 al secondo, con un tag nuovo `lancio-aaaammgg-hhmmss`, e aggiunge la riga a `risultati/esperimenti.csv`.
+
+Se l'API è già accesa, non ne avvia una seconda e manda comunque i 20 cicli. Per fermare il programma si chiudono le finestre «API operatore» e «Worker». `model.joblib` e `cicli_test.txt` sono già nel repository. Per rifare addestramento e valutazione si apre `train.ipynb` e si fa Run All.
+
+### Avvio manuale
+
+Tre terminali, da questa cartella:
+
+```powershell
 python api.py
 python worker.py 1
 python replay.py demo 2 20
 ```
 
-Aprire `http://127.0.0.1:8000`. Host, porta, numero di worker, ritardo artificiale e lease (30 s) stanno in `config.ini`. Per ripartire da una coda vuota cancellare `jobs.db`, `jobs.db-wal` e `jobs.db-shm`.
+Poi aprire `http://127.0.0.1:8000`. `python test_coda.py` controlla duplicati e lease e non serve per la demo. Host, porta, numero di worker, ritardo artificiale e lease (30 s) stanno in `config.ini`. Per ripartire da una coda vuota cancellare `jobs.db`, `jobs.db-wal` e `jobs.db-shm`.
 
 Argomenti utili:
 
@@ -123,8 +142,9 @@ Run registrati (1 worker, 20 cicli, nessun ritardo artificiale):
 | prova | 10 | 20 | 0 | 20 | 10.67 | 27.72 | 0.535 | 0.577 | 1.264 | 1 | 0 | 0.25 |
 | prova (rilancio) | 10 | 20 | 20 | 20 | 10.67 | 27.72 | 0.535 | 0.577 | 1.264 | 0 | 0 | 0.25 |
 | demo | 2 | 20 | 0 | 20 | 2.13 | 32.56 | 0.452 | 0.485 | 2.264 | 1 | 0 | 0.05 |
+| demo (secondo lancio) | 2 | 20 | 0 | 20 | 2.08 | 63.09 | 0.024 | 0.094 | 0.227 | 1 | 0 | 0.03 |
 
-A 2 e a 10 cicli/s, con 20 cicli, il calcolo medio resta intorno a 30 ms e a fine corsa non resta nessun lavoro incompleto. Il throughput segue la velocità di arrivo: con così pochi cicli non si vede ancora il punto in cui la coda cresce senza recuperare. `pendenti_a_fine_invio` vale 1 perché l'ultimo ciclo è ancora in elaborazione quando l'invio termina.
+A 2 e a 10 cicli/s, con 20 cicli, non resta nessun lavoro incompleto. Il throughput segue la velocità di arrivo: con così pochi cicli non si vede ancora il punto in cui la coda cresce senza recuperare. `pendenti_a_fine_invio` vale 1 perché l'ultimo ciclo è ancora in elaborazione quando l'invio termina. Il secondo `demo` ha la stessa velocità e gli stessi 20 cicli, con attesa in coda più bassa (0.024 s) e tempo di calcolo medio 63 ms.
 
 Protocollo per il confronto completo, sempre sullo stesso workload:
 
@@ -132,7 +152,7 @@ Protocollo per il confronto completo, sempre sullo stesso workload:
 2. Carico crescente, 1 worker: `python replay.py v5 5`, `v20 20`, `v50 50`, `v100 100`, `v200 200`. Il sistema non regge più quando `attesa_coda_media_s` e `pendenti_a_fine_invio` crescono a ogni velocità, cioè quando gli arrivi superano `throughput_job_s`.
 3. Capacità: ripetere lo stesso carico con `python worker.py 2`, `4` e `8`, cambiando tag (per esempio `w4-v200`). Il guadagno si ferma ai core fisici e alle scritture su sqlite.
 
-Nel csv allegato ci sono solo i tre run della tabella. Le serie di carico e di numero di worker vanno eseguite con i comandi sopra: ogni run si appende al file.
+Nel csv allegato ci sono i quattro run della tabella. `avvia.bat` ne aggiunge un altro a ogni doppio clic, con tag `lancio-...`. Le serie di carico e di numero di worker vanno eseguite con i comandi sopra.
 
 ## 6. Evidenze: interruzione e input ripetuto
 
@@ -149,9 +169,6 @@ Interrompere i worker con Ctrl+C a metà. I lavori presi e non chiusi restano `i
 
 ## 7. Dimostrazione breve
 
-1. `python api.py`
-2. `python worker.py 1`
-3. Aprire `http://127.0.0.1:8000`: la pagina elenca stato, etichetta, attesa, tempo di calcolo e tentativi, e si aggiorna ogni secondo.
-4. `python replay.py demo 2 20`
+Doppio clic su `avvia.bat`. Si aprono la pagina operatore e, se non erano già attivi, API e worker. Venti cicli passano da `in_coda` a `in_corso` a `fatto`, con una delle tre etichette. La pagina elenca stato, risultato, attesa, tempo di calcolo e tentativi, e si aggiorna ogni secondo.
 
-I 20 cicli compaiono `in_coda`, poi `in_corso`, poi `fatto` con una delle tre etichette. Il run `demo` nel csv chiude 20 lavori unici, throughput 2.13 job/s, calcolo medio 32.56 ms, nessun incompleto.
+I due run `demo` già nel csv chiudono entrambi 20 lavori unici, con throughput 2.13 e 2.08 job/s e nessun incompleto. Un lancio di `avvia.bat` fa lo stesso percorso con un tag `lancio-...`.
