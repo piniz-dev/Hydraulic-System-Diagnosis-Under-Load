@@ -135,37 +135,38 @@ Definizione delle misure:
 | Lavoro ancora aperto | lavori non `fatto`; `pendenti_a_fine_invio` è il valore nell'istante in cui finisce l'invio |
 | Risorse | secondi di CPU dei worker / durata, cioè i core occupati in media |
 
-Run registrati (1 worker, 20 cicli, nessun ritardo artificiale):
+I run `prova` e `demo` sono la dimostrazione corta (20 cicli). Il confronto di configurazioni usa tutti i 441 cicli di `cicli_test.txt`, senza ritardo artificiale. La macchina ha 8 core fisici.
 
-| Tag | Arrivi (cicli/s) | Inviati | Duplicati | Completati unici | Throughput (job/s) | Calcolo medio (ms) | Attesa coda (s) | End-to-end medio (s) | p95 (s) | Pendenti a fine invio | Incompleti | Core medi |
-|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| prova | 10 | 20 | 0 | 20 | 10.67 | 27.72 | 0.535 | 0.577 | 1.264 | 1 | 0 | 0.25 |
-| prova (rilancio) | 10 | 20 | 20 | 20 | 10.67 | 27.72 | 0.535 | 0.577 | 1.264 | 0 | 0 | 0.25 |
-| demo | 2 | 20 | 0 | 20 | 2.13 | 32.56 | 0.452 | 0.485 | 2.264 | 1 | 0 | 0.05 |
-| demo (secondo lancio) | 2 | 20 | 0 | 20 | 2.08 | 63.09 | 0.024 | 0.094 | 0.227 | 1 | 0 | 0.03 |
+Un worker, carico crescente:
 
-A 2 e a 10 cicli/s, con 20 cicli, non resta nessun lavoro incompleto. Il throughput segue la velocità di arrivo: con così pochi cicli non si vede ancora il punto in cui la coda cresce senza recuperare. `pendenti_a_fine_invio` vale 1 perché l'ultimo ciclo è ancora in elaborazione quando l'invio termina. Il secondo `demo` ha la stessa velocità e gli stessi 20 cicli, con attesa in coda più bassa (0.024 s) e tempo di calcolo medio 63 ms.
+| Tag | Arrivi (cicli/s) | Completati | Throughput (job/s) | Calcolo (ms) | Attesa coda (s) | End-to-end (s) | p95 (s) | Pendenti a fine invio | Incompleti | Core medi |
+|---|---|---|---|---|---|---|---|---|---|---|
+| w1-v5 | 5 | 441 | 5.01 | 22.39 | 0.019 | 0.043 | 0.067 | 1 | 0 | 0.09 |
+| w1-v20 | 20 | 441 | 20.01 | 22.90 | 0.021 | 0.046 | 0.075 | 1 | 0 | 0.42 |
+| w1-v50 | 50 | 441 | 50.14 | 23.65 | 0.016 | 0.041 | 0.064 | 2 | 0 | 1.13 |
+| w1-v100 | 100 | 441 | 62.17 | 27.22 | 1.437 | 1.466 | 2.497 | 135 | 0 | 1.62 |
+| w1-v200 | 200 | 441 | 72.25 | 22.33 | 1.189 | 1.214 | 2.075 | 179 | 0 | 1.53 |
 
-Protocollo per il confronto completo, sempre sullo stesso workload:
+Fino a 50 cicli/s il throughput coincide con gli arrivi, l'attesa resta sotto 0.03 s e a fine invio restano 1 o 2 lavori. A 100 cicli/s il throughput scende a 62 lavori/s, l'attesa media sale a 1.44 s e 135 lavori sono ancora aperti quando l'invio termina. A 200 cicli/s il tetto è 72 lavori/s, con 179 pendenti. Il calcolo resta intorno a 23 ms: il tempo in più è coda, non il modello. Il sistema smette di reggere tra 50 e 100 arrivi al secondo.
 
-1. Funzionamento normale: `python replay.py normale 1 10` con la pagina operatore aperta.
-2. Carico crescente, 1 worker: `python replay.py v5 5`, `v20 20`, `v50 50`, `v100 100`, `v200 200`. Il sistema non regge più quando `attesa_coda_media_s` e `pendenti_a_fine_invio` crescono a ogni velocità, cioè quando gli arrivi superano `throughput_job_s`.
-3. Capacità: ripetere lo stesso carico con `python worker.py 2`, `4` e `8`, cambiando tag (per esempio `w4-v200`). Il guadagno si ferma ai core fisici e alle scritture su sqlite.
+Stesso carico, 441 cicli a 200 al secondo, cambiando solo i processi:
 
-Nel csv allegato ci sono i quattro run della tabella. `avvia.bat` ne aggiunge un altro a ogni doppio clic, con tag `lancio-...`. Le serie di carico e di numero di worker vanno eseguite con i comandi sopra.
+| Tag | Worker | Throughput (job/s) | Attesa coda (s) | End-to-end (s) | p95 (s) | Pendenti a fine invio | Core medi |
+|---|---|---|---|---|---|---|---|
+| w1-v200 | 1 | 72.25 | 1.189 | 1.214 | 2.075 | 179 | 1.53 |
+| w2-v200 | 2 | 93.44 | 0.205 | 0.231 | 0.330 | 20 | 2.06 |
+| w4-v200 | 4 | 77.72 | 0.038 | 0.069 | 0.160 | 6 | 1.69 |
+| w8-v200 | 8 | 60.38 | 0.030 | 0.070 | 0.218 | 4 | 1.25 |
+
+Il secondo processo alza il tetto a 93 lavori/s e porta l'attesa da 1.19 s a 0.21 s. Con 4 e 8 processi la coda vista dall'operatore quasi sparisce (6 e 4 pendenti, p95 sotto 0.22 s), ma il throughput non sale e i core medi restano intorno a 2, lontano dagli 8 core della macchina. Il calcolo per ciclo non cambia. Oltre due worker il limite non è più la CPU del modello: API e worker scrivono sullo stesso file sqlite, e il client non riesce più a sostenere 200 inserimenti al secondo. Nessun run lascia lavori incompleti.
 
 ## 6. Evidenze: interruzione e input ripetuto
 
 **Input ripetuto.** Il secondo lancio di `python replay.py prova 10` rimanda gli stessi 20 id. L'API risponde `duplicato: true` (HTTP 200 invece di 202). Nel csv i duplicati sono 20, `completati_unici` resta 20 e nessun lavoro viene eseguito due volte. `test_coda.py` verifica lo stesso comportamento sul database: il secondo `INSERT` con la stessa chiave è ignorato.
 
-**Interruzione.** `python test_coda.py` simula la morte del worker: il lavoro resta `in_corso`, dopo il lease (30 s) un altro worker lo riprende e `tentativi` passa a 2. Nessun lavoro accodato viene cancellato. Dal vivo:
+**Interruzione.** `python test_coda.py` controlla il meccanismo: il lavoro resta `in_corso`, dopo il lease un altro worker lo riprende e `tentativi` passa a 2.
 
-```powershell
-python worker.py 2 2
-python replay.py crash 5 30
-```
-
-Interrompere i worker con Ctrl+C a metà. I lavori presi e non chiusi restano `in_corso`. Riavviando `worker.py`, dopo 30 s vengono ripresi (`tentativi` = 2, colonna `ripresi_dopo_crash`). L'unico lavoro ripetuto è quello interrotto, ricalcolato da capo; l'etichetta non cambia. Nel csv attuale `ripresi_dopo_crash` è 0: la prova automatica c'è, il run dal vivo con il tag `crash` non è ancora stato appeso al file.
+Dal vivo, tag `stop`: due worker con 2 s di ritardo artificiale, 30 cicli a 5 al secondo. I processi sono stati chiusi mentre 2 lavori erano `in_corso`, poi riavviati dopo il lease di 30 s. Nel csv: 30 completati, 0 incompleti, `ripresi_dopo_crash` = 2. Il calcolo medio resta 20 ms. L'end-to-end p95 di 16.6 s è l'attesa del lease, non l'analisi. Nessun lavoro accodato è andato perso. I due lavori interrotti sono stati ricalcolati da capo; l'etichetta non cambia perché il modello è deterministico.
 
 ## 7. Dimostrazione breve
 
