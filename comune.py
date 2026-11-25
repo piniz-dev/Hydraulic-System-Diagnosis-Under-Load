@@ -43,8 +43,13 @@ def feature(misure, ciclo):
                            for a in (np.asarray(misure[s][ciclo]) for s in SENSORI)])
 
 
+def connetti():
+    # connessione leggera, per chi usa una tabella gia' creata (una per richiesta nell'API)
+    return sqlite3.connect(CARTELLA / cfg["db"]["file"], timeout=30, isolation_level=None)
+
+
 def apri_db():
-    con = sqlite3.connect(CARTELLA / cfg["db"]["file"], timeout=30, isolation_level=None)
+    con = connetti()
     con.execute("PRAGMA journal_mode=WAL")  # letture (pagina operatore) non bloccano le scritture
     con.execute("""CREATE TABLE IF NOT EXISTS jobs(
         id TEXT PRIMARY KEY,        -- chiave scelta dal client: stesso id = stesso lavoro
