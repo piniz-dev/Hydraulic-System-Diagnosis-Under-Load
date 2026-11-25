@@ -1,0 +1,6 @@
+__pycache__/
+*.pyc
+data/
+jobs.db*
+*.log
+.ipynb_checkpoints/

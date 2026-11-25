@@ -1,0 +1,4 @@
+tag,nota,velocita_invio,inviati,duplicati,completati_unici,throughput_job_s,calcolo_medio_ms,attesa_coda_media_s,end_to_end_medio_s,end_to_end_p95_s,pendenti_a_fine_invio,rimasti_incompleti,core_medi_usati,ripresi_dopo_crash
+prova,,10.0,20,0,20,10.67,27.72,0.535,0.577,1.264,1,0,0.25,0
+prova,,10.0,20,20,20,10.67,27.72,0.535,0.577,1.264,0,0,0.25,0
+demo,,2.0,20,0,20,2.13,32.56,0.452,0.485,2.264,1,0,0.05,0

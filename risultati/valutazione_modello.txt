@@ -1,0 +1,38 @@
+cicli: train 1323  validation 441  test 441
+
+F1 macro su validation:
+  riferimento (classe piu' frequente)    0.237
+  regressione logistica                  0.988
+  random forest                          0.997
+
+scelto su validation: random forest
+
+=== TEST: riferimento (classe piu' frequente)
+matrice di confusione (righe = vero 0/1/2, colonne = previsto):
+[[244   0   0]
+ [ 99   0   0]
+ [ 98   0   0]]
+                 precision    recall  f1-score   support
+
+nessuna perdita       0.55      1.00      0.71       244
+ perdita debole       0.00      0.00      0.00        99
+  perdita grave       0.00      0.00      0.00        98
+
+       accuracy                           0.55       441
+      macro avg       0.18      0.33      0.24       441
+   weighted avg       0.31      0.55      0.39       441
+
+=== TEST: random forest
+matrice di confusione (righe = vero 0/1/2, colonne = previsto):
+[[244   0   0]
+ [  0  99   0]
+ [  0   0  98]]
+                 precision    recall  f1-score   support
+
+nessuna perdita       1.00      1.00      1.00       244
+ perdita debole       1.00      1.00      1.00        99
+  perdita grave       1.00      1.00      1.00        98
+
+       accuracy                           1.00       441
+      macro avg       1.00      1.00      1.00       441
+   weighted avg       1.00      1.00      1.00       441
