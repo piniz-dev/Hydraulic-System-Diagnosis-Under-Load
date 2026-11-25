@@ -1,0 +1,198 @@
+<!doctype html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Operatore · diagnosi pompa idraulica</title>
+<style>
+  :root {
+    --bg: #0e0f10; --deep: #08090a; --fg: #eaeaea; --mut: #8a8f94; --line: #34383c;
+    --amber: #e9a21b; --red: #d64541;
+    --mono: ui-monospace, "Cascadia Mono", Consolas, monospace;
+    --head: "Arial Black", "Helvetica Neue", Arial, sans-serif;
+  }
+  * { box-sizing: border-box; margin: 0; }
+  body { background: var(--bg); color: var(--fg); font: 14px/1.4 Arial, sans-serif; }
+  .wrap { max-width: 1280px; margin: 0 auto; padding: 0 24px; }
+  .mono { font-family: var(--mono); font-size: 11px; letter-spacing: .08em; text-transform: uppercase; color: var(--mut); }
+  .acc { color: var(--amber); }
+
+  header { border-bottom: 1px solid var(--line); }
+  header .wrap { display: flex; justify-content: space-between; align-items: center; height: 52px; }
+  .live { display: flex; gap: 8px; align-items: center; }
+  .dot { width: 8px; height: 8px; background: var(--amber); }
+  .dot.off { background: var(--red); }
+
+  h1 { font-family: var(--head); font-size: clamp(28px, 4vw, 44px); line-height: .95; letter-spacing: -.01em; text-transform: uppercase; margin: 32px 0 6px; }
+
+  /* griglia a filo: le celle condividono il bordo grazie a gap 1px sul colore della linea */
+  .grid { display: grid; gap: 1px; background: var(--line); border: 1px solid var(--line); margin-top: 24px; }
+  .grid > * { background: var(--bg); padding: 16px 18px; }
+  .kpi { grid-template-columns: repeat(5, 1fr); }
+  .big { font-family: var(--head); font-size: clamp(34px, 4.5vw, 56px); line-height: 1; margin-top: 10px; font-variant-numeric: tabular-nums; }
+  .big small { font-family: var(--mono); font-size: 13px; letter-spacing: .05em; color: var(--mut); margin-left: 4px; }
+  .hot { background: var(--amber) !important; color: var(--bg); }
+  .hot .mono { color: var(--bg); }
+
+  .row2 { display: grid; grid-template-columns: 2fr 1fr; gap: 24px; }
+  .classi { grid-template-columns: repeat(3, 1fr); }
+  .bar { height: 6px; background: var(--line); margin-top: 12px; }
+  .bar i { display: block; height: 100%; background: currentColor; transition: width .3s; }
+  .c0 { color: var(--fg); } .c1 { color: var(--amber); } .c2 { color: var(--red); }
+
+  form.grid { grid-template-columns: 1fr; }
+  label { display: block; margin-bottom: 8px; }
+  .campo { display: flex; gap: 1px; background: var(--line); }
+  input { flex: 1; min-width: 0; background: var(--deep); color: var(--fg); border: 0; padding: 12px; font: 16px var(--mono); }
+  input:focus-visible, button:focus-visible { outline: 2px solid var(--amber); outline-offset: 2px; }
+  button { background: var(--amber); color: var(--bg); border: 0; padding: 12px 18px; font: 700 12px var(--mono); letter-spacing: .08em; text-transform: uppercase; cursor: pointer; }
+  button:hover { background: #f2b53c; }
+  button:active { transform: translateY(1px); }
+  .esito { min-height: 18px; margin-top: 10px; }
+
+  table { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
+  th { text-align: left; font: 11px var(--mono); letter-spacing: .08em; text-transform: uppercase; color: var(--mut); padding: 10px 12px; border-bottom: 1px solid var(--line); position: sticky; top: 0; background: var(--bg); }
+  td { padding: 9px 12px; border-bottom: 1px solid #1c1f22; white-space: nowrap; }
+  td.num, th.num { text-align: right; }
+  td.id { font-family: var(--mono); font-size: 12px; color: var(--mut); }
+  tr.nuovo td { animation: lampo 1.2s ease-out; }
+  @keyframes lampo { from { background: rgba(233,162,27,.18); } to { background: transparent; } }
+  .stato { font: 11px var(--mono); letter-spacing: .08em; text-transform: uppercase; }
+  .stato.in_coda { color: var(--mut); } .stato.in_corso { color: var(--amber); } .stato.fatto { color: var(--fg); }
+  .tabella { max-height: 520px; overflow: auto; border: 1px solid var(--line); margin-top: 12px; }
+  .vuoto { padding: 40px 12px; text-align: center; }
+
+  section { margin-top: 40px; }
+  footer { border-top: 1px solid var(--line); margin-top: 48px; padding: 16px 0 32px; }
+
+  @media (max-width: 900px) {
+    .kpi { grid-template-columns: repeat(2, 1fr); }
+    .row2 { grid-template-columns: 1fr; }
+  }
+  @media (prefers-reduced-motion: reduce) { * { animation: none !important; transition: none !important; } }
+</style>
+</head>
+<body>
+<header>
+  <div class="wrap">
+    <span class="mono">[ OPERATORE / POMPA IDRAULICA ]</span>
+    <span class="live mono"><span class="dot" id="dot"></span><span id="ora">—</span></span>
+  </div>
+</header>
+
+<main class="wrap">
+  <h1>Diagnosi perdita pompa</h1>
+  <p class="mono">Aggiornamento ogni secondo · dati da jobs.db</p>
+
+  <div class="grid kpi" aria-live="polite">
+    <div><div class="mono">In coda</div><div class="big" id="k-coda">0</div></div>
+    <div><div class="mono">In corso</div><div class="big" id="k-corso">0</div></div>
+    <div class="hot"><div class="mono">Completati</div><div class="big" id="k-fatti">0</div></div>
+    <div><div class="mono">Throughput · 10 s</div><div class="big"><span id="k-thr">0</span><small>job/s</small></div></div>
+    <div><div class="mono">Attesa media · ultimi 50</div><div class="big"><span id="k-e2e">—</span><small>s</small></div></div>
+  </div>
+
+  <section class="row2">
+    <div>
+      <div class="mono">[ ESITI / TUTTI I CICLI CLASSIFICATI ]</div>
+      <div class="grid classi">
+        <div class="c0"><div class="mono">Classe 0 · nessuna perdita</div><div class="big" id="c-0">0</div><div class="bar"><i id="b-0" style="width:0"></i></div></div>
+        <div class="c1"><div class="mono">Classe 1 · perdita debole</div><div class="big" id="c-1">0</div><div class="bar"><i id="b-1" style="width:0"></i></div></div>
+        <div class="c2"><div class="mono">Classe 2 · perdita grave</div><div class="big" id="c-2">0</div><div class="bar"><i id="b-2" style="width:0"></i></div></div>
+      </div>
+    </div>
+    <div>
+      <div class="mono">[ INVIA UN CICLO ]</div>
+      <form class="grid" id="invia">
+        <div>
+          <label class="mono" for="ciclo">Numero del ciclo, da 0 a 2204</label>
+          <div class="campo">
+            <input id="ciclo" name="ciclo" type="number" min="0" max="2204" required value="128">
+            <button type="submit">Invia ciclo</button>
+          </div>
+          <div class="esito mono" id="esito" role="status"></div>
+        </div>
+      </form>
+    </div>
+  </section>
+
+  <section>
+    <div class="mono">[ ULTIMI 200 LAVORI ]</div>
+    <div class="tabella">
+      <table>
+        <thead><tr>
+          <th>Id</th><th class="num">Ciclo</th><th>Stato</th><th>Risultato</th>
+          <th>Inviato</th><th>Finito</th><th class="num">Attesa (s)</th><th class="num">Calcolo (ms)</th><th class="num">Tentativi</th><th>Worker</th>
+        </tr></thead>
+        <tbody id="righe"><tr><td colspan="10" class="vuoto mono">Nessun lavoro ancora: invia un ciclo o lancia replay.py</td></tr></tbody>
+      </table>
+    </div>
+  </section>
+</main>
+
+<footer>
+  <div class="wrap mono">Hydraulic / diagnosis under load · Pinizzotto · Albatri · Re Garbagnati</div>
+</footer>
+
+<script>
+const ET = ['nessuna perdita', 'perdita debole', 'perdita grave'];
+const $ = (id) => document.getElementById(id);
+const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const ora = (t) => (t ? new Date(t * 1000).toLocaleTimeString('it-IT') : '');
+const num = (x, d) => x.toLocaleString('it-IT', { minimumFractionDigits: d, maximumFractionDigits: d });
+let visti = new Set();
+
+async function giro() {
+  try {
+    const [s, c, j] = await Promise.all(['/stats', '/classi', '/jobs'].map((u) => fetch(u).then((r) => r.json())));
+    $('k-coda').textContent = s.in_coda || 0;
+    $('k-corso').textContent = s.in_corso || 0;
+    $('k-fatti').textContent = s.fatto || 0;
+
+    const tot = [0, 1, 2].reduce((a, k) => a + (c[k] || 0), 0);
+    [0, 1, 2].forEach((k) => {
+      $('c-' + k).textContent = c[k] || 0;
+      $('b-' + k).style.width = tot ? (100 * (c[k] || 0) / tot) + '%' : '0';
+    });
+
+    const adesso = Date.now() / 1000, fatti = j.filter((r) => r.finito);
+    $('k-thr').textContent = num(fatti.filter((r) => adesso - r.finito <= 10).length / 10, 1);
+    const ult = fatti.slice(0, 50);
+    $('k-e2e').textContent = ult.length ? num(ult.reduce((a, r) => a + r.finito - r.inviato, 0) / ult.length, 2) : '—';
+
+    $('righe').innerHTML = j.length ? j.map((r) => {
+      const chiave = r.id + r.stato, nuovo = visti.size && !visti.has(chiave);
+      const ris = r.etichetta == null ? '' : `<span class="c${r.etichetta}">${ET[r.etichetta]}</span>`;
+      return `<tr class="${nuovo ? 'nuovo' : ''}"><td class="id">${esc(r.id)}</td><td class="num">${r.ciclo}</td>
+        <td><span class="stato ${r.stato}">${r.stato.replace('_', ' ')}</span></td><td>${ris}</td>
+        <td>${ora(r.inviato)}</td><td>${ora(r.finito)}</td>
+        <td class="num">${r.finito ? num(r.finito - r.inviato, 2) : ''}</td>
+        <td class="num">${r.t_calcolo ? num(r.t_calcolo * 1000, 1) : ''}</td>
+        <td class="num">${r.tentativi}</td><td class="id">${esc(r.worker || '')}</td></tr>`;
+    }).join('') : '<tr><td colspan="10" class="vuoto mono">Nessun lavoro ancora: invia un ciclo o lancia replay.py</td></tr>';
+    visti = new Set(j.map((r) => r.id + r.stato));
+
+    $('dot').className = 'dot';
+    $('ora').textContent = 'LIVE · ' + new Date().toLocaleTimeString('it-IT');
+  } catch (e) {
+    $('dot').className = 'dot off';
+    $('ora').textContent = 'API NON RAGGIUNGIBILE';
+  }
+}
+
+$('invia').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const ciclo = Number($('ciclo').value);
+  const r = await fetch('/jobs', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ ciclo, id: 'operatore-ciclo-' + ciclo }) });
+  const d = await r.json();
+  $('esito').innerHTML = r.status === 202 ? `<span class="acc">In coda:</span> ${esc(d.id)}`
+    : r.status === 200 ? `Già inviato: ${esc(d.id)} non viene ricalcolato` : esc(d.errore || 'Errore');
+  giro();
+});
+
+giro();
+setInterval(giro, 1000);
+</script>
+</body>
+</html>

@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "dashboard",
+      "runtimeExecutable": "python",
+      "runtimeArgs": ["-c", "import comune,runpy; comune.cfg['api']['porta']='8765'; runpy.run_path('api.py', run_name='__main__')"],
+      "port": 8765
+    }
+  ]
+}
